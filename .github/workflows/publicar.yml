@@ -1,0 +1,49 @@
+name: Publicar contenido
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # cada 30 minutos
+  workflow_dispatch:          # botón "Run workflow" para publicar ya
+    inputs:
+      prueba:
+        description: "Modo prueba (no publica, solo muestra qué haría)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicador
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - name: Publicar lo que toca
+        env:
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          MODO_PRUEBA: ${{ inputs.prueba && '1' || '0' }}
+        run: python publicar.py
+
+      - name: Guardar qué se publicó
+        run: |
+          git config user.name "publicador-habitosfixhoy"
+          git config user.email "actions@users.noreply.github.com"
+          git add calendario.csv
+          git diff --cached --quiet || (git commit -m "Actualizo estado de publicaciones" && git push)

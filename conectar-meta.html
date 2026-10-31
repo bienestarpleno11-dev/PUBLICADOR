@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conectar Instagram y Facebook · Publicador</title>
+<style>
+:root{--verde:#2f7a57;--claro:#e6f2ec;--crema:#fbf8f2;--texto:#1f2a24;--suave:#5b6660;--linea:#e3e0d8;--rojo:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--crema);color:var(--texto);line-height:1.55}
+.wrap{max-width:680px;margin:0 auto;padding:32px 16px 60px}
+h1{color:var(--verde);margin:0 0 6px}
+p.suave{color:var(--suave);margin-top:0}
+.caja{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:20px;margin-top:18px}
+label{display:block;font-weight:600;margin:14px 0 6px}
+input{width:100%;padding:12px;border:1.5px solid var(--linea);border-radius:10px;font-size:15px;font-family:monospace}
+button{background:var(--verde);color:#fff;border:0;border-radius:10px;padding:14px 20px;font-size:16px;font-weight:700;cursor:pointer;margin-top:18px;width:100%}
+button.copiar{width:auto;padding:8px 14px;font-size:14px;margin:0}
+.res{display:flex;gap:10px;align-items:center;margin:10px 0}
+.res code{flex:1;background:var(--claro);padding:10px;border-radius:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.res b{min-width:150px;font-size:14px}
+.error{color:var(--rojo);font-weight:600;margin-top:12px;white-space:pre-wrap}
+.aviso{background:#fff4c2;border-radius:10px;padding:12px;font-size:14px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Conectar Instagram y Facebook</h1>
+  <p class="suave">Esta página corre solo en tu compu. Tus claves van directo a Facebook y no se guardan en ningún lado.</p>
+
+  <div class="caja">
+    <label for="app">1. Identificador de la app (App ID)</label>
+    <input id="app" placeholder="Ej.: 123456789012345">
+    <label for="sec">2. Clave secreta de la app (App Secret)</label>
+    <input id="sec" type="password" placeholder="La copiás de Configuración → Básica">
+    <label for="tok">3. Token del Explorador de la API Graph</label>
+    <input id="tok" placeholder="EAA…">
+    <button id="ir">Conseguir mis claves permanentes</button>
+    <div id="err" class="error"></div>
+  </div>
+
+  <div class="caja" id="salida" hidden>
+    <h2 style="margin-top:0">¡Listo! Copiá estos 3 datos a GitHub</h2>
+    <p class="suave">Van en tu repositorio → Settings → Secrets and variables → Actions → New repository secret. El nombre tiene que ser exactamente el de la izquierda.</p>
+    <div id="paginas"></div>
+    <div class="aviso">⚠ No le muestres estos datos a nadie ni los pegues en el calendario: con ellos se puede publicar en tu página.</div>
+  </div>
+</div>
+<script>
+const V = "v23.0";
+const $ = id => document.getElementById(id);
+async function api(ruta, params){
+  const url = `https://graph.facebook.com/${V}/${ruta}?` + new URLSearchParams(params);
+  const r = await fetch(url);
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  return d;
+}
+function fila(nombre, valor){
+  const div = document.createElement("div"); div.className = "res";
+  const b = document.createElement("b"); b.textContent = nombre;
+  const c = document.createElement("code"); c.textContent = valor || "(no encontrado)";
+  const btn = document.createElement("button"); btn.className = "copiar"; btn.textContent = "Copiar";
+  btn.onclick = async () => { try { await navigator.clipboard.writeText(valor); btn.textContent = "¡Copiado!"; } catch(e){ prompt("Copiá esto:", valor); } };
+  div.append(b, c, btn); return div;
+}
+$("ir").onclick = async () => {
+  $("err").textContent = ""; $("salida").hidden = true; $("paginas").innerHTML = "";
+  const app = $("app").value.trim(), sec = $("sec").value.trim(), tok = $("tok").value.trim();
+  if (!app || !sec || !tok) { $("err").textContent = "Completá los 3 campos."; return; }
+  $("ir").textContent = "Conectando…"; $("ir").disabled = true;
+  try {
+    const largo = await api("oauth/access_token", {grant_type:"fb_exchange_token", client_id:app, client_secret:sec, fb_exchange_token:tok});
+    const cuentas = await api("me/accounts", {fields:"id,name,access_token,instagram_business_account{id,username}", access_token:largo.access_token, limit:50});
+    if (!cuentas.data || !cuentas.data.length) throw new Error("No encontré páginas de Facebook. Revisá que al generar el token marcaste tu página y los permisos de la guía.");
+    for (const p of cuentas.data) {
+      const t = document.createElement("h3"); t.textContent = "Página: " + p.name +
+        (p.instagram_business_account ? "  ·  Instagram @" + (p.instagram_business_account.username || "") : "  ·  (sin Instagram conectado)");
+      $("paginas").append(t, fila("META_PAGE_ID", p.id), fila("META_PAGE_TOKEN", p.access_token),
+        fila("META_IG_USER_ID", p.instagram_business_account ? p.instagram_business_account.id : ""));
+    }
+    $("salida").hidden = false;
+  } catch (e) {
+    $("err").textContent = "No se pudo: " + e.message;
+  } finally { $("ir").textContent = "Conseguir mis claves permanentes"; $("ir").disabled = false; }
+};
+</script>
+</body>
+</html>
